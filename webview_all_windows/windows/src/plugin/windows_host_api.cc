@@ -43,6 +43,21 @@ std::string FormatHresult(HRESULT result) {
   return value.str();
 }
 
+std::optional<FlutterError> SettingResult(const char *setting, HRESULT result) {
+  if (SUCCEEDED(result)) {
+    return std::nullopt;
+  }
+  return FlutterError(
+      result == E_NOINTERFACE ? kErrorNotSupported : kErrorMethodFailed,
+      std::string("Applying ") + setting + " failed (HRESULT: " +
+          FormatHresult(result) + ").",
+      flutter::EncodableValue(flutter::EncodableMap{
+          {flutter::EncodableValue("setting"), flutter::EncodableValue(setting)},
+          {flutter::EncodableValue("hresult"),
+           flutter::EncodableValue(FormatHresult(result))},
+      }));
+}
+
 FlutterError CreateInitializationError(
     const std::string &code, const std::string &stage,
     const std::string &message, HRESULT result,
@@ -922,11 +937,7 @@ WindowsHostApi::SetDevToolsEnabled(int64_t texture_id, bool enabled) {
   if (!bridge) {
     return InvalidIdError();
   }
-  if (!bridge->SetDevToolsEnabled(enabled)) {
-    return webview_all_windows::FlutterError(
-        kErrorNotSupported, "Setting the DevTools mode failed.");
-  }
-  return std::nullopt;
+  return SettingResult("devToolsEnabled", bridge->SetDevToolsEnabled(enabled));
 }
 
 std::optional<webview_all_windows::FlutterError>
@@ -936,12 +947,8 @@ WindowsHostApi::SetBrowserAcceleratorKeysEnabled(int64_t texture_id,
   if (!bridge) {
     return InvalidIdError();
   }
-  if (!bridge->SetBrowserAcceleratorKeysEnabled(enabled)) {
-    return webview_all_windows::FlutterError(
-        kErrorNotSupported,
-        "Setting the browser accelerator keys mode failed.");
-  }
-  return std::nullopt;
+  return SettingResult("browserAcceleratorKeysEnabled",
+                       bridge->SetBrowserAcceleratorKeysEnabled(enabled));
 }
 
 std::optional<webview_all_windows::FlutterError>
@@ -950,11 +957,7 @@ WindowsHostApi::SetDownloadsEnabled(int64_t texture_id, bool enabled) {
   if (!bridge) {
     return InvalidIdError();
   }
-  if (!bridge->SetDownloadsEnabled(enabled)) {
-    return webview_all_windows::FlutterError(
-        kErrorNotSupported, "Setting the downloads mode failed.");
-  }
-  return std::nullopt;
+  return SettingResult("downloadsEnabled", bridge->SetDownloadsEnabled(enabled));
 }
 
 std::optional<webview_all_windows::FlutterError>

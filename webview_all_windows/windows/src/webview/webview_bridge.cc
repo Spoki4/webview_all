@@ -735,15 +735,15 @@ bool WebviewBridge::SetZoomControlEnabled(bool enabled) {
   return webview_->SetZoomControlEnabled(enabled);
 }
 
-bool WebviewBridge::SetDevToolsEnabled(bool enabled) {
+HRESULT WebviewBridge::SetDevToolsEnabled(bool enabled) {
   return webview_->SetDevToolsEnabled(enabled);
 }
 
-bool WebviewBridge::SetBrowserAcceleratorKeysEnabled(bool enabled) {
+HRESULT WebviewBridge::SetBrowserAcceleratorKeysEnabled(bool enabled) {
   return webview_->SetBrowserAcceleratorKeysEnabled(enabled);
 }
 
-bool WebviewBridge::SetDownloadsEnabled(bool enabled) {
+HRESULT WebviewBridge::SetDownloadsEnabled(bool enabled) {
   return webview_->SetDownloadsEnabled(enabled);
 }
 

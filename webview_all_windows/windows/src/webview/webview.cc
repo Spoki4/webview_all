@@ -902,15 +902,28 @@ void Webview::RegisterEventHandlers() {
 
   auto webview24 = webview_.try_query<ICoreWebView2_4>();
   if (webview24) {
-    webview24->add_DownloadStarting(
+    download_handler_result_ = webview24->add_DownloadStarting(
         Callback<ICoreWebView2DownloadStartingEventHandler>(
             [this](ICoreWebView2 *sender,
                    ICoreWebView2DownloadStartingEventArgs *args) -> HRESULT {
               if (!downloads_enabled_) {
-                // Cancelled before the operation is created, so nothing is
-                // written to disk and no download event reaches Dart.
-                args->put_Cancel(TRUE);
-                return S_OK;
+                const HRESULT result = args->put_Cancel(TRUE);
+                if (FAILED(result)) {
+                  util::LogWarning("Cancelling a WebView2 download failed.");
+                } else if (download_event_callback_) {
+                  wil::com_ptr<ICoreWebView2DownloadOperation> download;
+                  wil::unique_cotaskmem_string uri;
+                  wil::unique_cotaskmem_string path;
+                  if (SUCCEEDED(args->get_DownloadOperation(download.put())) &&
+                      download && SUCCEEDED(download->get_Uri(&uri)) &&
+                      SUCCEEDED(args->get_ResultFilePath(&path))) {
+                    download_event_callback_(
+                        {WebviewDownloadEventKind::DownloadCancelled,
+                         util::Utf8FromUtf16(uri.get()),
+                         util::Utf8FromUtf16(path.get()), 0, 0});
+                  }
+                }
+                return result;
               }
               args->put_Handled(TRUE);
 
@@ -1425,24 +1438,28 @@ bool Webview::SetZoomControlEnabled(bool enabled) {
   return false;
 }
 
-bool Webview::SetDevToolsEnabled(bool enabled) {
+HRESULT Webview::SetDevToolsEnabled(bool enabled) {
   if (settings_) {
-    return settings_->put_AreDevToolsEnabled(enabled ? TRUE : FALSE) == S_OK;
+    return settings_->put_AreDevToolsEnabled(enabled ? TRUE : FALSE);
   }
-  return false;
+  return E_NOINTERFACE;
 }
 
-bool Webview::SetBrowserAcceleratorKeysEnabled(bool enabled) {
+HRESULT Webview::SetBrowserAcceleratorKeysEnabled(bool enabled) {
   if (settings3_) {
     return settings3_->put_AreBrowserAcceleratorKeysEnabled(
-               enabled ? TRUE : FALSE) == S_OK;
+        enabled ? TRUE : FALSE);
   }
-  return false;
+  // Older runtimes always allow browser accelerators.
+  return enabled ? S_OK : E_NOINTERFACE;
 }
 
-bool Webview::SetDownloadsEnabled(bool enabled) {
+HRESULT Webview::SetDownloadsEnabled(bool enabled) {
+  if (!enabled && FAILED(download_handler_result_)) {
+    return download_handler_result_;
+  }
   downloads_enabled_ = enabled;
-  return true;
+  return S_OK;
 }
 
 bool Webview::SetBackgroundColor(int32_t color) {
