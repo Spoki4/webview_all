@@ -1029,7 +1029,8 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     return _hostApi.setZoomControlEnabled(_textureId, enabled);
   }
 
-  /// Sets whether the DevTools can be opened (F12, Ctrl+Shift+I, [openDevTools]).
+  /// Sets whether users can open DevTools through menus and keyboard shortcuts.
+  /// Does not prevent explicit calls to [openDevTools].
   Future<void> setDevToolsEnabled(bool enabled) async {
     if (_isDisposed) {
       return;
@@ -1047,7 +1048,7 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     return _hostApi.setBrowserAcceleratorKeysEnabled(_textureId, enabled);
   }
 
-  /// Sets whether downloads are allowed; when disabled they are cancelled before anything is written to disk.
+  /// Sets whether new downloads may save files. Existing downloads are unchanged.
   Future<void> setDownloadsEnabled(bool enabled) async {
     if (_isDisposed) {
       return;

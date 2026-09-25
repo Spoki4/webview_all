@@ -61,16 +61,39 @@ class WindowsWebViewControllerCreationParams
   /// Creates a new [WindowsWebViewControllerCreationParams].
   const WindowsWebViewControllerCreationParams({
     this.popupWindowPolicy = WindowsPopupWindowPolicy.sameWindow,
+    this.devToolsEnabled = false,
+    this.browserAcceleratorKeysEnabled,
+    this.downloadsEnabled,
   });
 
   /// Creates a [WindowsWebViewControllerCreationParams] from generic params.
   const WindowsWebViewControllerCreationParams.fromPlatformWebViewControllerCreationParams(
     PlatformWebViewControllerCreationParams params, {
     this.popupWindowPolicy = WindowsPopupWindowPolicy.sameWindow,
+    this.devToolsEnabled = false,
+    this.browserAcceleratorKeysEnabled,
+    this.downloadsEnabled,
   });
 
   /// How popup windows should be handled.
   final WindowsPopupWindowPolicy popupWindowPolicy;
+
+  /// Whether users can open DevTools through menus and keyboard shortcuts.
+  ///
+  /// Disabled by default in all build modes. Set to true to enable user access.
+  /// Does not prevent the app from explicitly calling
+  /// [WindowsWebViewController.openDevTools].
+  final bool devToolsEnabled;
+
+  /// Whether browser shortcuts such as reload, print and find are enabled.
+  ///
+  /// Null preserves the WebView2 default (enabled). Editing shortcuts remain
+  /// available. Disabling requires ICoreWebView2Settings3.
+  final bool? browserAcceleratorKeysEnabled;
+
+  /// Whether this WebView can start downloads. Null preserves the default
+  /// (enabled). Disabling downloads requires ICoreWebView2_4.
+  final bool? downloadsEnabled;
 }
 
 /// Windows-specific creation parameters for [WindowsWebViewWidget].
@@ -168,17 +191,29 @@ class WindowsWebViewController extends PlatformWebViewController {
   String? _pageStartedUrl;
   String? _title;
   String? _userAgent;
-  late final _WebView2Setting<bool> _devToolsEnabled = _WebView2Setting<bool>(
-    (bool enabled) => _webviewController.setDevToolsEnabled(enabled),
-  );
+  late final _WebView2Setting<bool> _devToolsEnabled = _WebView2Setting<bool>((
+    bool enabled,
+  ) {
+    _throwIfDisposed();
+    return _webviewController.setDevToolsEnabled(enabled);
+  }, _windowsParams.devToolsEnabled);
   late final _WebView2Setting<bool> _browserAcceleratorKeysEnabled =
-      _WebView2Setting<bool>(
-        (bool enabled) =>
-            _webviewController.setBrowserAcceleratorKeysEnabled(enabled),
-      );
-  late final _WebView2Setting<bool> _downloadsEnabled = _WebView2Setting<bool>(
-    (bool enabled) => _webviewController.setDownloadsEnabled(enabled),
-  );
+      _WebView2Setting<bool>((bool enabled) {
+        _throwIfDisposed();
+        return _webviewController.setBrowserAcceleratorKeysEnabled(enabled);
+      }, _windowsParams.browserAcceleratorKeysEnabled);
+  late final _WebView2Setting<bool> _downloadsEnabled = _WebView2Setting<bool>((
+    bool enabled,
+  ) {
+    _throwIfDisposed();
+    return _webviewController.setDownloadsEnabled(enabled);
+  }, _windowsParams.downloadsEnabled);
+
+  Iterable<_WebView2Setting<bool>> get _settings => <_WebView2Setting<bool>>[
+    _devToolsEnabled,
+    _browserAcceleratorKeysEnabled,
+    _downloadsEnabled,
+  ];
   bool _canGoBack = false;
   bool _canGoForward = false;
   bool _verticalScrollBarEnabled = true;
@@ -324,17 +359,6 @@ class WindowsWebViewController extends PlatformWebViewController {
       },
     );
     _throwIfDisposed();
-    // A retried initialization creates a new WebView2, which starts from the
-    // WebView2 defaults; settings requested earlier must not be lost.
-    for (final _WebView2Setting<bool> setting in <_WebView2Setting<bool>>[
-      _devToolsEnabled,
-      _browserAcceleratorKeysEnabled,
-      _downloadsEnabled,
-    ]) {
-      await setting.applyToNewWebView();
-      _throwIfDisposed();
-    }
-
     _subscriptions.addAll(<StreamSubscription<dynamic>>[
       _webviewController.url.listen((String url) {
         weakThis.target?._handleUrlChanged(url);
@@ -372,15 +396,31 @@ class WindowsWebViewController extends PlatformWebViewController {
     _throwIfDisposed();
     await _initializationFuture!;
     _throwIfDisposed();
+    await _applySettings();
   }
 
-  Future<void> _retryInitialization() {
-    if (_isDisposed) {
-      return Future<void>.error(_disposedStateError());
+  Future<void> _applySettings() async {
+    for (final _WebView2Setting<bool> setting in _settings) {
+      _throwIfDisposed();
+      await setting.apply();
     }
-    final Future<void> initializationFuture = _prepareRetry();
-    _setInitializationFuture(initializationFuture);
-    return initializationFuture;
+    _throwIfDisposed();
+  }
+
+  Future<void> _retryInitialization() async {
+    _throwIfDisposed();
+    final Future<void> previous = _initializationFuture!;
+    try {
+      await previous;
+    } catch (_) {
+      _throwIfDisposed();
+      if (identical(_initializationFuture, previous)) {
+        _setInitializationFuture(_prepareRetry());
+      }
+      await _initializationFuture!;
+    }
+    // A setting failure leaves the native view and its subscriptions intact.
+    await _applySettings();
   }
 
   void _setInitializationFuture(Future<void> future) {
@@ -452,6 +492,10 @@ class WindowsWebViewController extends PlatformWebViewController {
     } catch (_) {
       // Continue with cleanup.
     }
+
+    await Future.wait<void>(
+      _settings.map((_WebView2Setting<bool> setting) => setting.settled),
+    );
 
     Object? cleanupError;
     StackTrace? cleanupStackTrace;
@@ -1359,38 +1403,40 @@ ${params.functionBody}
     await _webviewController.setZoomControlEnabled(enabled);
   }
 
-  /// Sets whether the WebView2 DevTools can be opened.
+  /// Sets whether users can open DevTools through menus and keyboard shortcuts.
   ///
-  /// When disabled, neither F12 / Ctrl+Shift+I nor [openDevTools] opens
-  /// them. Mirrors `WebKitWebViewController.setInspectable`. WebView2 enables
-  /// DevTools by default.
-  Future<void> setInspectable(bool inspectable) async {
-    _devToolsEnabled.request(inspectable);
+  /// Disabled by default. Does not close existing DevTools or prevent the app
+  /// from calling [openDevTools]. Changes apply on the next top-level navigation.
+  Future<void> setDevToolsEnabled(bool enabled) async {
+    _throwIfDisposed();
+    _devToolsEnabled.request(enabled);
     await _ensureInitialized();
-    await _devToolsEnabled.apply();
   }
 
   /// Sets whether browser-specific accelerator keys are enabled.
   ///
   /// When disabled, WebView2 stops acting on browser-specific keys such as
   /// F5 (reload), Ctrl+P (print), Ctrl+F (find) and Ctrl+Shift+I (DevTools).
-  /// Enabled by default. Requires `ICoreWebView2Settings3`; on a WebView2
+  /// Enabled by default. Disabling requires `ICoreWebView2Settings3`; on a
   /// Runtime without it this throws a [PlatformException].
+  /// Changes apply on the next top-level navigation. Text-editing shortcuts
+  /// remain enabled; disabled browser shortcuts are not forwarded to Flutter.
   Future<void> setBrowserAcceleratorKeysEnabled(bool enabled) async {
+    _throwIfDisposed();
     _browserAcceleratorKeysEnabled.request(enabled);
     await _ensureInitialized();
-    await _browserAcceleratorKeysEnabled.apply();
   }
 
   /// Sets whether the page may start downloads.
   ///
-  /// When disabled, every download is cancelled as it starts: nothing is
-  /// written to disk and the WebView2 download UI is never shown. Enabled by
-  /// default.
+  /// When disabled, new downloads are cancelled without saving the downloaded
+  /// file or showing the download UI. Existing downloads are not cancelled.
+  /// Enabled by default. Disabling requires `ICoreWebView2_4`; an unavailable
+  /// download handler causes a [PlatformException], not a silent success.
   Future<void> setDownloadsEnabled(bool enabled) async {
+    _throwIfDisposed();
     _downloadsEnabled.request(enabled);
     await _ensureInitialized();
-    await _downloadsEnabled.apply();
   }
 
   @override
@@ -2251,31 +2297,47 @@ class _WindowsWebViewPermissionRequest
 
 /// A WebView2 setting owned by [WindowsWebViewController].
 ///
-/// Remembers the requested value so it survives a retried initialization,
-/// and remembers what the current native WebView already has so the value is
-/// sent once, whichever of the setter and the initialization gets there first.
+/// Retains requested values across initialization failures. Native creation and
+/// settings application have separate futures so a failed setting can be
+/// corrected without leaving the controller's initialization future failed.
 final class _WebView2Setting<T extends Object> {
-  _WebView2Setting(this._push);
+  _WebView2Setting(this._push, this._requested);
 
   final Future<void> Function(T value) _push;
   T? _requested;
   T? _applied;
+  Future<void>? _tail;
+
+  Future<void> get settled async {
+    await _tail;
+  }
 
   void request(T value) => _requested = value;
 
   /// Sends the requested value unless the native WebView already has it.
-  Future<void> apply() async {
-    final T? value = _requested;
-    if (value == null || value == _applied) {
-      return;
+  Future<void> apply() {
+    if (_tail == null && _requested == _applied) {
+      return Future<void>.value();
     }
-    await _push(value);
-    _applied = value;
-  }
-
-  /// A new native WebView starts from the WebView2 defaults.
-  Future<void> applyToNewWebView() {
-    _applied = null;
-    return apply();
+    final Future<void>? previous = _tail;
+    final Future<void> result = () async {
+      await previous;
+      while (_requested != null && _requested != _applied) {
+        final T value = _requested!;
+        await _push(value);
+        _applied = value;
+      }
+    }();
+    // Report failures to this caller without poisoning subsequent requests.
+    final Future<void> tail = result.catchError((Object _) {});
+    _tail = tail;
+    unawaited(
+      tail.then((_) {
+        if (identical(_tail, tail)) {
+          _tail = null;
+        }
+      }),
+    );
+    return result;
   }
 }
