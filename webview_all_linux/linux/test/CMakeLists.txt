@@ -17,4 +17,8 @@ target_compile_options(download_policy_test PRIVATE -Wall -Wextra -Werror
 
 enable_testing()
 add_test(NAME download_policy COMMAND download_policy_test)
-set_tests_properties(download_policy PROPERTIES TIMEOUT 60)
+# Download policy tests do not use the desktop accessibility service.
+set_tests_properties(download_policy PROPERTIES
+  TIMEOUT 60
+  ENVIRONMENT "NO_AT_BRIDGE=1"
+)
