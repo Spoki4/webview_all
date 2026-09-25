@@ -35,6 +35,13 @@ final windows = controller.platform as WindowsWebViewController;
 await windows.openDevTools();
 ```
 
+WebView2 allows DevTools by default. Block them, including F12 and
+Ctrl+Shift+I, per controller:
+
+```dart
+await windows.setInspectable(false);
+```
+
 Check runtime availability:
 
 ```dart

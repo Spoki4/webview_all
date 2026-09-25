@@ -82,6 +82,9 @@ final params = const WindowsWebViewControllerCreationParams(
 | `setPopupWindowPolicy` | 运行时修改 popup 策略。 |
 | `setZoomFactor` | 设置 WebView2 缩放因子。 |
 | `setCacheDisabled` | 控制请求是否绕过 cache。 |
+| `setInspectable` | 允许或禁止 DevTools（F12、Ctrl+Shift+I、`openDevTools`）。默认允许。 |
+| `setBrowserAcceleratorKeysEnabled` | 启用或禁用浏览器快捷键，例如 F5、Ctrl+P 和 Ctrl+F。默认启用。 |
+| `setDownloadsEnabled` | 允许下载，或在下载开始时取消，不会写入磁盘。默认允许。 |
 | `dispose` | 永久释放此 controller 及其 WebView2 资源。 |
 
 `onNavigationRequest` 会覆盖 controller 加载以及页面内容触发的 WebView2 主 frame 导航，包括 redirect 和 `sameWindow` popup。controller 请求在原生分发前完成判断，因此会保留自定义 method、headers 和 body；页面导航通过取消后等待异步 Dart 决策、放行后重放来实现，策略性取消不会触发 `onWebResourceError`。

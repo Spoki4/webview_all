@@ -119,6 +119,9 @@ final widget = WebViewWidget.fromPlatformCreationParams(
 | `setPopupWindowPolicy(policy)` | Changes popup handling after creation. |
 | `setZoomFactor(double zoomFactor)` | Sets WebView2 zoom factor. |
 | `setCacheDisabled(bool disabled)` | Toggles cache bypass behavior. |
+| `setInspectable(bool inspectable)` | Allows or blocks DevTools (F12, Ctrl+Shift+I, `openDevTools()`). Allowed by default. |
+| `setBrowserAcceleratorKeysEnabled(bool enabled)` | Enables or disables browser accelerator keys such as F5, Ctrl+P, and Ctrl+F. Enabled by default. |
+| `setDownloadsEnabled(bool enabled)` | Allows downloads or cancels them as they start, before anything is written to disk. Allowed by default. |
 | `dispose()` | Permanently releases this controller and its WebView2 resources. |
 
 Common APIs implemented on Windows include request loading with method, headers, and body; JavaScript execution; JavaScript channels; console messages; JavaScript dialogs; permission requests; HTTP errors; HTTP auth; SSL auth; scroll position; scrollbars; background color; user agent override; and overscroll styling.
