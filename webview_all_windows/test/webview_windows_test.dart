@@ -1316,6 +1316,85 @@ void main() {
   });
 
   test(
+    'sets DevTools, accelerator keys and downloads through WebView2',
+    () async {
+      final devToolsValues = <bool>[];
+      final acceleratorKeysValues = <bool>[];
+      final downloadsValues = <bool>[];
+      _mockWindowsWebViewCreation(
+        onSetDevToolsEnabled: devToolsValues.add,
+        onSetBrowserAcceleratorKeysEnabled: acceleratorKeysValues.add,
+        onSetDownloadsEnabled: downloadsValues.add,
+      );
+
+      final controller = WindowsWebViewController(
+        const PlatformWebViewControllerCreationParams(),
+      );
+
+      await controller.setInspectable(false);
+      await controller.setBrowserAcceleratorKeysEnabled(false);
+      await controller.setDownloadsEnabled(false);
+      await controller.setDownloadsEnabled(true);
+
+      expect(devToolsValues, <bool>[false]);
+      expect(acceleratorKeysValues, <bool>[false]);
+      expect(downloadsValues, <bool>[false, true]);
+    },
+  );
+
+  testWidgets(
+    'WebView2 settings are re-applied after a retried initialization',
+    (WidgetTester tester) async {
+      final devToolsValues = <bool>[];
+      final acceleratorKeysValues = <bool>[];
+      final downloadsValues = <bool>[];
+      _mockWindowsWebViewCreation(
+        creationFailureCount: 1,
+        onSetDevToolsEnabled: devToolsValues.add,
+        onSetBrowserAcceleratorKeysEnabled: acceleratorKeysValues.add,
+        onSetDownloadsEnabled: downloadsValues.add,
+      );
+      final WindowsWebViewController controller = WindowsWebViewController(
+        const PlatformWebViewControllerCreationParams(),
+      );
+
+      // The first environment fails, so the settings cannot reach WebView2 yet;
+      // they must still hold once the widget's refresh creates a new one.
+      await tester.runAsync(() async {
+        for (final Future<void> Function() apply in <Future<void> Function()>[
+          () => controller.setInspectable(false),
+          () => controller.setBrowserAcceleratorKeysEnabled(false),
+          () => controller.setDownloadsEnabled(false),
+        ]) {
+          await expectLater(apply(), throwsA(isA<PlatformException>()));
+        }
+      });
+      expect(devToolsValues, isEmpty);
+
+      final WindowsWebViewWidget platformWidget = WindowsWebViewWidget(
+        PlatformWebViewWidgetCreationParams(controller: controller),
+      );
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: SizedBox(
+            width: 800,
+            height: 600,
+            child: Builder(builder: platformWidget.build),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Refresh'));
+      await tester.pumpAndSettle();
+
+      expect(devToolsValues, <bool>[false]);
+      expect(acceleratorKeysValues, <bool>[false]);
+      expect(downloadsValues, <bool>[false]);
+    },
+  );
+
+  test(
     'dispatches Windows permission requests and returns decisions',
     () async {
       final controller = WindowsWebViewController(
@@ -1908,6 +1987,9 @@ void _mockWindowsWebViewCreation({
   String? clearAllWebsiteDataFailureCode,
   void Function(bool enabled)? onSetJavaScriptEnabled,
   void Function(bool enabled)? onSetZoomControlEnabled,
+  void Function(bool enabled)? onSetDevToolsEnabled,
+  void Function(bool enabled)? onSetBrowserAcceleratorKeysEnabled,
+  void Function(bool enabled)? onSetDownloadsEnabled,
   void Function(bool enabled)? onSetNavigationRequestCallbacksEnabled,
   void Function(WindowsSizeData size)? onSetSize,
   int setSizeFailureCount = 0,
@@ -2088,6 +2170,28 @@ void _mockWindowsWebViewCreation({
     onSetZoomControlEnabled?.call(args[1]! as bool);
     return _encodePigeonSuccess();
   });
+  messenger.setMockMessageHandler(_hostApiChannel('setDevToolsEnabled'), (
+    ByteData? message,
+  ) async {
+    final args = _decodePigeonArgs(message);
+    onSetDevToolsEnabled?.call(args[1]! as bool);
+    return _encodePigeonSuccess();
+  });
+  messenger.setMockMessageHandler(
+    _hostApiChannel('setBrowserAcceleratorKeysEnabled'),
+    (ByteData? message) async {
+      final args = _decodePigeonArgs(message);
+      onSetBrowserAcceleratorKeysEnabled?.call(args[1]! as bool);
+      return _encodePigeonSuccess();
+    },
+  );
+  messenger.setMockMessageHandler(_hostApiChannel('setDownloadsEnabled'), (
+    ByteData? message,
+  ) async {
+    final args = _decodePigeonArgs(message);
+    onSetDownloadsEnabled?.call(args[1]! as bool);
+    return _encodePigeonSuccess();
+  });
   messenger.setMockMessageHandler(
     _hostApiChannel('setJavaScriptDialogCallbacksEnabled'),
     (ByteData? message) async {
@@ -2194,6 +2298,12 @@ void _clearWindowsWebViewCreationMock() {
     _hostApiChannel('setZoomControlEnabled'),
     null,
   );
+  messenger.setMockMessageHandler(_hostApiChannel('setDevToolsEnabled'), null);
+  messenger.setMockMessageHandler(
+    _hostApiChannel('setBrowserAcceleratorKeysEnabled'),
+    null,
+  );
+  messenger.setMockMessageHandler(_hostApiChannel('setDownloadsEnabled'), null);
   messenger.setMockMessageHandler(
     _hostApiChannel('setJavaScriptDialogCallbacksEnabled'),
     null,

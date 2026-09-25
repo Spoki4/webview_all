@@ -917,6 +917,47 @@ WindowsHostApi::SetZoomControlEnabled(int64_t texture_id, bool enabled) {
 }
 
 std::optional<webview_all_windows::FlutterError>
+WindowsHostApi::SetDevToolsEnabled(int64_t texture_id, bool enabled) {
+  auto bridge = FindBridge(texture_id);
+  if (!bridge) {
+    return InvalidIdError();
+  }
+  if (!bridge->SetDevToolsEnabled(enabled)) {
+    return webview_all_windows::FlutterError(
+        kErrorNotSupported, "Setting the DevTools mode failed.");
+  }
+  return std::nullopt;
+}
+
+std::optional<webview_all_windows::FlutterError>
+WindowsHostApi::SetBrowserAcceleratorKeysEnabled(int64_t texture_id,
+                                                 bool enabled) {
+  auto bridge = FindBridge(texture_id);
+  if (!bridge) {
+    return InvalidIdError();
+  }
+  if (!bridge->SetBrowserAcceleratorKeysEnabled(enabled)) {
+    return webview_all_windows::FlutterError(
+        kErrorNotSupported,
+        "Setting the browser accelerator keys mode failed.");
+  }
+  return std::nullopt;
+}
+
+std::optional<webview_all_windows::FlutterError>
+WindowsHostApi::SetDownloadsEnabled(int64_t texture_id, bool enabled) {
+  auto bridge = FindBridge(texture_id);
+  if (!bridge) {
+    return InvalidIdError();
+  }
+  if (!bridge->SetDownloadsEnabled(enabled)) {
+    return webview_all_windows::FlutterError(
+        kErrorNotSupported, "Setting the downloads mode failed.");
+  }
+  return std::nullopt;
+}
+
+std::optional<webview_all_windows::FlutterError>
 WindowsHostApi::SetZoomFactor(int64_t texture_id, double zoom_factor) {
   auto bridge = FindBridge(texture_id);
   if (!bridge) {

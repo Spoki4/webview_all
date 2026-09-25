@@ -1029,6 +1029,33 @@ class WebviewController extends ValueNotifier<WebviewValue> {
     return _hostApi.setZoomControlEnabled(_textureId, enabled);
   }
 
+  /// Sets whether the DevTools can be opened (F12, Ctrl+Shift+I, [openDevTools]).
+  Future<void> setDevToolsEnabled(bool enabled) async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _hostApi.setDevToolsEnabled(_textureId, enabled);
+  }
+
+  /// Sets whether browser-specific accelerator keys (F5, Ctrl+P, Ctrl+F, ...) are enabled.
+  Future<void> setBrowserAcceleratorKeysEnabled(bool enabled) async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _hostApi.setBrowserAcceleratorKeysEnabled(_textureId, enabled);
+  }
+
+  /// Sets whether downloads are allowed; when disabled they are cancelled before anything is written to disk.
+  Future<void> setDownloadsEnabled(bool enabled) async {
+    if (_isDisposed) {
+      return;
+    }
+    assert(value.isInitialized);
+    return _hostApi.setDownloadsEnabled(_textureId, enabled);
+  }
+
   /// Sets the zoom factor.
   Future<void> setZoomFactor(double zoomFactor) async {
     if (_isDisposed) {

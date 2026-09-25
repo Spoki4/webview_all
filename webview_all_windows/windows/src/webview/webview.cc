@@ -231,6 +231,7 @@ Webview::Webview(
   if (SUCCEEDED(webview_->get_Settings(settings.put()))) {
     settings_ = settings;
     settings2_ = settings.try_query<ICoreWebView2Settings2>();
+    settings3_ = settings.try_query<ICoreWebView2Settings3>();
     if (settings2_) {
       wil::unique_cotaskmem_string default_user_agent;
       if (SUCCEEDED(settings2_->get_UserAgent(&default_user_agent)) &&
@@ -905,6 +906,12 @@ void Webview::RegisterEventHandlers() {
         Callback<ICoreWebView2DownloadStartingEventHandler>(
             [this](ICoreWebView2 *sender,
                    ICoreWebView2DownloadStartingEventArgs *args) -> HRESULT {
+              if (!downloads_enabled_) {
+                // Cancelled before the operation is created, so nothing is
+                // written to disk and no download event reaches Dart.
+                args->put_Cancel(TRUE);
+                return S_OK;
+              }
               args->put_Handled(TRUE);
 
               wil::com_ptr<ICoreWebView2DownloadOperation> download;
@@ -1416,6 +1423,26 @@ bool Webview::SetZoomControlEnabled(bool enabled) {
     return settings_->put_IsZoomControlEnabled(enabled ? TRUE : FALSE) == S_OK;
   }
   return false;
+}
+
+bool Webview::SetDevToolsEnabled(bool enabled) {
+  if (settings_) {
+    return settings_->put_AreDevToolsEnabled(enabled ? TRUE : FALSE) == S_OK;
+  }
+  return false;
+}
+
+bool Webview::SetBrowserAcceleratorKeysEnabled(bool enabled) {
+  if (settings3_) {
+    return settings3_->put_AreBrowserAcceleratorKeysEnabled(
+               enabled ? TRUE : FALSE) == S_OK;
+  }
+  return false;
+}
+
+bool Webview::SetDownloadsEnabled(bool enabled) {
+  downloads_enabled_ = enabled;
+  return true;
 }
 
 bool Webview::SetBackgroundColor(int32_t color) {

@@ -168,6 +168,17 @@ class WindowsWebViewController extends PlatformWebViewController {
   String? _pageStartedUrl;
   String? _title;
   String? _userAgent;
+  late final _WebView2Setting<bool> _devToolsEnabled = _WebView2Setting<bool>(
+    (bool enabled) => _webviewController.setDevToolsEnabled(enabled),
+  );
+  late final _WebView2Setting<bool> _browserAcceleratorKeysEnabled =
+      _WebView2Setting<bool>(
+        (bool enabled) =>
+            _webviewController.setBrowserAcceleratorKeysEnabled(enabled),
+      );
+  late final _WebView2Setting<bool> _downloadsEnabled = _WebView2Setting<bool>(
+    (bool enabled) => _webviewController.setDownloadsEnabled(enabled),
+  );
   bool _canGoBack = false;
   bool _canGoForward = false;
   bool _verticalScrollBarEnabled = true;
@@ -313,6 +324,16 @@ class WindowsWebViewController extends PlatformWebViewController {
       },
     );
     _throwIfDisposed();
+    // A retried initialization creates a new WebView2, which starts from the
+    // WebView2 defaults; settings requested earlier must not be lost.
+    for (final _WebView2Setting<bool> setting in <_WebView2Setting<bool>>[
+      _devToolsEnabled,
+      _browserAcceleratorKeysEnabled,
+      _downloadsEnabled,
+    ]) {
+      await setting.applyToNewWebView();
+      _throwIfDisposed();
+    }
 
     _subscriptions.addAll(<StreamSubscription<dynamic>>[
       _webviewController.url.listen((String url) {
@@ -1338,6 +1359,40 @@ ${params.functionBody}
     await _webviewController.setZoomControlEnabled(enabled);
   }
 
+  /// Sets whether the WebView2 DevTools can be opened.
+  ///
+  /// When disabled, neither F12 / Ctrl+Shift+I nor [openDevTools] opens
+  /// them. Mirrors `WebKitWebViewController.setInspectable`. WebView2 enables
+  /// DevTools by default.
+  Future<void> setInspectable(bool inspectable) async {
+    _devToolsEnabled.request(inspectable);
+    await _ensureInitialized();
+    await _devToolsEnabled.apply();
+  }
+
+  /// Sets whether browser-specific accelerator keys are enabled.
+  ///
+  /// When disabled, WebView2 stops acting on browser-specific keys such as
+  /// F5 (reload), Ctrl+P (print), Ctrl+F (find) and Ctrl+Shift+I (DevTools).
+  /// Enabled by default. Requires `ICoreWebView2Settings3`; on a WebView2
+  /// Runtime without it this throws a [PlatformException].
+  Future<void> setBrowserAcceleratorKeysEnabled(bool enabled) async {
+    _browserAcceleratorKeysEnabled.request(enabled);
+    await _ensureInitialized();
+    await _browserAcceleratorKeysEnabled.apply();
+  }
+
+  /// Sets whether the page may start downloads.
+  ///
+  /// When disabled, every download is cancelled as it starts: nothing is
+  /// written to disk and the WebView2 download UI is never shown. Enabled by
+  /// default.
+  Future<void> setDownloadsEnabled(bool enabled) async {
+    _downloadsEnabled.request(enabled);
+    await _ensureInitialized();
+    await _downloadsEnabled.apply();
+  }
+
   @override
   Future<void> setBackgroundColor(Color color) async {
     await _ensureInitialized();
@@ -2191,5 +2246,36 @@ class _WindowsWebViewPermissionRequest
     if (!decision.isCompleted) {
       decision.complete(native_types.WebviewPermissionDecision.deny);
     }
+  }
+}
+
+/// A WebView2 setting owned by [WindowsWebViewController].
+///
+/// Remembers the requested value so it survives a retried initialization,
+/// and remembers what the current native WebView already has so the value is
+/// sent once, whichever of the setter and the initialization gets there first.
+final class _WebView2Setting<T extends Object> {
+  _WebView2Setting(this._push);
+
+  final Future<void> Function(T value) _push;
+  T? _requested;
+  T? _applied;
+
+  void request(T value) => _requested = value;
+
+  /// Sends the requested value unless the native WebView already has it.
+  Future<void> apply() async {
+    final T? value = _requested;
+    if (value == null || value == _applied) {
+      return;
+    }
+    await _push(value);
+    _applied = value;
+  }
+
+  /// A new native WebView starts from the WebView2 defaults.
+  Future<void> applyToNewWebView() {
+    _applied = null;
+    return apply();
   }
 }
