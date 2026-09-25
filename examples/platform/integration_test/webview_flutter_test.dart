@@ -228,6 +228,89 @@ return {
     );
   });
 
+  testWidgets('Windows controller can refuse downloads', (
+    WidgetTester tester,
+  ) async {
+    if (!Platform.isWindows) {
+      return;
+    }
+
+    // WebView2 saves to the user's Downloads folder by default. The allowed
+    // download is the control: without it, a page that never starts a
+    // download at all would pass the refused case too.
+    final Directory downloads = Directory(
+      '${Platform.environment['USERPROFILE']}\\Downloads',
+    );
+    final String stamp = DateTime.now().microsecondsSinceEpoch.toString();
+    final File refused = File(
+      '${downloads.path}\\webview_all_refused_$stamp.txt',
+    );
+    final File allowed = File(
+      '${downloads.path}\\webview_all_allowed_$stamp.txt',
+    );
+    addTearDown(() async {
+      for (final File file in <File>[refused, allowed]) {
+        if (file.existsSync()) {
+          file.deleteSync();
+        }
+      }
+    });
+
+    Future<void> download({
+      required bool enabled,
+      required String fileName,
+    }) async {
+      final Completer<void> pageFinished = Completer<void>();
+      final WebViewController controller = WebViewController();
+      final WindowsWebViewController windowsController =
+          controller.platform as WindowsWebViewController;
+      await controller.setJavaScriptMode(JavaScriptMode.unrestricted);
+      await windowsController.setDownloadsEnabled(enabled);
+      await controller.setNavigationDelegate(
+        NavigationDelegate(
+          onPageFinished: (_) {
+            if (!pageFinished.isCompleted) {
+              pageFinished.complete();
+            }
+          },
+        ),
+      );
+      await controller.loadHtmlString('''
+<!DOCTYPE html>
+<html><head><title>Windows download test</title></head>
+<body>Windows download test</body></html>
+''');
+      await tester.pumpWidget(WebViewWidget(controller: controller));
+      await pageFinished.future.timeout(const Duration(seconds: 15));
+      await controller.runJavaScript('''
+const link = document.createElement('a');
+link.href = URL.createObjectURL(new Blob(['webview_all'], {type: 'text/plain'}));
+link.download = '$fileName';
+document.body.appendChild(link);
+link.click();
+''');
+    }
+
+    await download(enabled: true, fileName: allowed.uri.pathSegments.last);
+    await _waitFor(allowed.existsSync, const Duration(seconds: 15));
+    expect(
+      allowed.existsSync(),
+      isTrue,
+      reason: 'The control download never reached ${downloads.path}.',
+    );
+
+    await download(enabled: false, fileName: refused.uri.pathSegments.last);
+    // Longer than the allowed download took: absence is the assertion.
+    await Future<void>.delayed(const Duration(seconds: 3));
+    expect(
+      refused.existsSync(),
+      isFalse,
+      reason: 'A download started while downloads were disabled.',
+    );
+
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('Windows controller releases its renderer process', (
     WidgetTester tester,
   ) async {
@@ -2011,4 +2094,11 @@ Future<void> _waitForJavaScriptPredicate(
     await Future<void>.delayed(const Duration(milliseconds: 100));
   }
   throw TestFailure('JavaScript result did not satisfy: $expression');
+}
+
+Future<void> _waitFor(bool Function() condition, Duration timeout) async {
+  final DateTime deadline = DateTime.now().add(timeout);
+  while (!condition() && DateTime.now().isBefore(deadline)) {
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+  }
 }
